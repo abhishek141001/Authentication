@@ -1,42 +1,96 @@
 import jwt from "jsonwebtoken"
 import User from "../models/User.js"
+import logger from "../utils/logger.js"
 
-const secret = process.env.JWT_SECRET || 'changeme-in-env'
+const secret = process.env.JWT_SECRET || 'WXJC1UNzPg+dLmho8RWDWXxOvRZ7t5WE6dn7zZsGDJs='
 
 const authenticate = async (req, res, next) => {
     try {
         const authHeader = req.headers['authorization']
+        
         if (!authHeader) {
-            return res.status(401).send('Access denied: No authorization header')
+            return res.status(401).json({
+                success: false,
+                error: 'Access denied: No authorization header'
+            })
         }
 
         const [schema, credential] = authHeader.split(' ')
+        
         if (schema !== 'Bearer' || !credential) {
-            return res.status(400).send('Bearer token missing or malformed')
+            return res.status(401).json({
+                success: false,
+                error: 'Bearer token missing or malformed'
+            })
         }
+
         const token = credential
 
         let payload
         try {
             payload = jwt.verify(token, secret)
         } catch (err) {
-            return res.status(401).send('Invalid or expired token')
+            logger.error(`JWT verification failed: ${err.message}`)
+            return res.status(401).json({
+                success: false,
+                error: 'Invalid or expired token'
+            })
         }
 
-        if (!payload || !payload.email) {
-            return res.status(401).send('Access denied: Invalid token payload')
+        if (!payload || (!payload.userId && !payload.id)) {
+            return res.status(401).json({
+                success: false,
+                error: 'Access denied: Invalid token payload'
+            })
         }
 
-        const user = await User.findOne({ email: payload.email }).select('-password')
-        if (!user) {
-            return res.status(401).send('Access denied: User not found')
+        // Use userId if available, otherwise fall back to id
+        const userId = payload.userId || payload.id;
+        
+        // Validate that userId is a valid MongoDB ObjectId
+        if (!userId || typeof userId !== 'string' || userId.length !== 24) {
+            return res.status(401).json({
+                success: false,
+                error: 'Invalid user ID format'
+            })
         }
 
-        req.user = user
-        return next()
+        // Fetch user from database
+        try {
+            const user = await User.findById(userId).select('_id email name storageUsed storageLimit documentCount premium createdAt updatedAt');
+            if (!user) {
+                return res.status(401).json({
+                    success: false,
+                    error: 'User not found'
+                })
+            }
+            
+            req.user = { 
+                id: user._id.toString(), 
+                email: user.email,
+                name: user.name,
+                storageUsed: user.storageUsed,
+                storageLimit: user.storageLimit,
+                documentCount: user.documentCount,
+                premium: user.premium
+            }
+            
+            logger.info(`Authentication successful for user: ${req.user.id}`);
+            return next()
+        } catch (err) {
+            logger.error(`User lookup failed: ${err.message}`)
+            return res.status(401).json({
+                success: false,
+                error: 'User verification failed'
+            })
+        }
+        
     } catch (err) {
-        console.error('Auth error:', err)
-        return res.status(500).send('Internal server error')
+        logger.error(`Auth middleware error: ${err.message}`)
+        return res.status(500).json({
+            success: false,
+            error: 'Internal server error'
+        })
     }
 }
 

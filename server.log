@@ -1,0 +1,5 @@
+nohup: ignoring input
+🔐 JWT Secret being used: WXJC1UNzPg+dLmho8RWDWXxOvRZ7t5WE6dn7zZsGDJs=
+[dotenv@17.2.0] injecting env (7) from .env (tip: 🔐 encrypt with dotenvx: https://dotenvx.com)
+[dotenv@17.2.0] injecting env (0) from .env (tip: 🔐 prevent committing .env to code: https://dotenvx.com/precommit)
+app is running on port: 5000
